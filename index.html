@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for a nice, clean font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Custom styles */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Simple animation for chat bubbles */
+        .chat-bubble {
+            animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes pop-in {
+            0% {
+                opacity: 0;
+                transform: scale(0.9);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        /* Custom scrollbar for a cleaner look */
+        #chat-window::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-window::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        #chat-window::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+        #chat-window::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+
+    <!-- Main Chat Container -->
+    <div class="w-full max-w-2xl h-full md:h-[90vh] flex flex-col bg-white shadow-2xl rounded-xl">
+        
+        <!-- Header -->
+        <header class="bg-blue-600 text-white p-4 flex items-center justify-between rounded-t-xl">
+            <h1 class="text-xl font-bold">AI Customer Support</h1>
+            <div class="flex items-center space-x-2">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-300 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-green-400"></span>
+                </span>
+                <span>Online</span>
+            </div>
+        </header>
+
+        <!-- Chat Window -->
+        <main id="chat-window" class="flex-1 p-6 overflow-y-auto space-y-4">
+            <!-- Initial Bot Message -->
+            <div class="flex justify-start chat-bubble">
+                <div class="bg-gray-200 text-gray-800 p-3 rounded-lg max-w-xs">
+                    <p>Hello! How can I assist you today?</p>
+                </div>
+            </div>
+            <!-- Chat messages will be appended here -->
+        </main>
+
+        <!-- Typing Indicator -->
+        <div id="typing-indicator" class="p-4 text-sm text-gray-500 hidden">
+            <span>AI is typing...</span>
+        </div>
+
+        <!-- Input Area -->
+        <footer class="p-4 border-t border-gray-200 rounded-b-xl">
+            <form id="chat-form" class="flex items-center space-x-3">
+                <input type="text" id="message-input" placeholder="Type your message..." autocomplete="off"
+                    class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <button type="submit"
+                    class="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-transform transform hover:scale-105">
+                    Send
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const chatForm = document.getElementById('chat-form');
+        const messageInput = document.getElementById('message-input');
+        const chatWindow = document.getElementById('chat-window');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // This will store the conversation history token IDs from the model
+        let chatHistoryIds = null;
+
+        // --- Event Listener for Form Submission ---
+        chatForm.addEventListener('submit', async (event) => {
+            event.preventDefault(); // Prevent the default form submission (page reload)
+
+            const userMessage = messageInput.value.trim();
+            if (!userMessage) return; // Don't send empty messages
+
+            // Display the user's message in the chat window
+            appendMessage(userMessage, 'user');
+            messageInput.value = ''; // Clear the input field
+            showTypingIndicator(true);
+
+            try {
+                // --- API Call to the Backend ---
+                // We send the user's message and the current chat history to the backend.
+                const response = await fetch('http://127.0.0.1:5000/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: userMessage,
+                        // Send the list of token IDs back to the server
+                        chat_history_ids: chatHistoryIds 
+                    }),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Update the chat history with the new IDs from the backend
+                chatHistoryIds = data.chat_history_ids;
+
+                // Display the bot's response
+                appendMessage(data.response, 'bot');
+
+            } catch (error) {
+                console.error('Error:', error);
+                appendMessage('Sorry, something went wrong. Please try again later.', 'bot', true);
+            } finally {
+                showTypingIndicator(false);
+            }
+        });
+
+        // --- Helper Functions ---
+
+        /**
+         * Appends a message to the chat window.
+         * @param {string} message - The message content.
+         * @param {string} sender - 'user' or 'bot'.
+         * @param {boolean} isError - Optional flag for error messages.
+         */
+        function appendMessage(message, sender, isError = false) {
+            const messageWrapper = document.createElement('div');
+            const messageBubble = document.createElement('div');
+            
+            messageWrapper.classList.add('flex', 'chat-bubble');
+            messageBubble.classList.add('p-3', 'rounded-lg', 'max-w-md', 'md:max-w-lg');
+            
+            if (sender === 'user') {
+                messageWrapper.classList.add('justify-end');
+                messageBubble.classList.add('bg-blue-600', 'text-white');
+            } else {
+                messageWrapper.classList.add('justify-start');
+                if (isError) {
+                    messageBubble.classList.add('bg-red-500', 'text-white');
+                } else {
+                    messageBubble.classList.add('bg-gray-200', 'text-gray-800');
+                }
+            }
+
+            messageBubble.innerHTML = `<p>${message}</p>`; // Use innerHTML to render potential formatting
+            messageWrapper.appendChild(messageBubble);
+            chatWindow.appendChild(messageWrapper);
+
+            // Scroll to the bottom of the chat window to see the new message
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        }
+
+        /**
+         * Shows or hides the "AI is typing..." indicator.
+         * @param {boolean} show - True to show, false to hide.
+         */
+        function showTypingIndicator(show) {
+            if (show) {
+                typingIndicator.classList.remove('hidden');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+            } else {
+                typingIndicator.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
